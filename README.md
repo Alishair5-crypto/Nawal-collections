@@ -1,35 +1,27 @@
-# NAWAL COLLECTIONS — WhatsApp Cart Ecommerce
+# NAWAL COLLECTIONS — Production V1
+
+Vercel + Supabase production ecommerce build.
+
+## Required Vercel environment variables
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
 
 ## Included
-- Premium responsive storefront
-- Product catalog, search, category filters
-- Wishlist and persistent cart using browser localStorage
-- Functional checkout form
-- Order creation and order-status management
-- Admin dashboard
-- Product add/edit/delete
-- Product image URL replacement
-- Inventory/stock fields
-- Customer/order overview
-- Mobile navigation
-- SEO-ready HTML metadata
-- Vercel/Vite deployment configuration
+- Supabase Auth customer signup/login
+- Admin role protection
+- Products stored in Supabase PostgreSQL
+- Admin product CRUD
+- Supabase Storage product image uploads
+- Orders and order items stored in database
+- Stock decrement after order creation
+- Order status management
+- Live store settings editable by admin
+- Cart and WhatsApp cart ordering to the saved store WhatsApp number
+- Vercel SPA rewrite
 
-## Run locally
-npm install
-npm run dev
+Default store WhatsApp: 923046093592
+Default brand: NAWAL COLLECTIONS
+Copyright: ALISHAIR5
 
-## Production build
-npm run build
-
-## Vercel
-Import the GitHub repository into Vercel. Framework: Vite. Build: `npm run build`. Output: `dist`.
-
-## Important production integration
-This build intentionally does not fake a payment provider or cloud database. For a real multi-user store, connect a database/auth service and a payment gateway. The UI and local working flows are already wired so those services can be attached without redesigning the storefront.
-
-\n## WhatsApp Cart
-Default WhatsApp order number: `923046093592`.
-Customers add products to cart and click **ORDER CART ON WHATSAPP**. A pre-filled cart message opens in WhatsApp. The client can change the number from Admin → Store Settings.
-\n## Client handover
-The Admin panel includes editable Store Settings and Product Editor. Replace brand name, WhatsApp number, copyright, product data and product image URLs after the trial.
+## Important
+The uploaded ZIP does not contain secrets. Add the Supabase URL and public/publishable key as Vercel environment variables before deploying.
