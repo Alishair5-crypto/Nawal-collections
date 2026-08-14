@@ -1,27 +1,34 @@
-# NAWAL COLLECTIONS — Production V1
+# NAWAL COLLECTIONS — Production Store
 
-Vercel + Supabase production ecommerce build.
+This build keeps the existing Supabase schema and Vercel deployment model while fixing the store flow:
 
-## Required Vercel environment variables
+- Real Supabase product records only; no seed/demo products are inserted by the frontend.
+- UUID-safe cart and stale-cart cleanup.
+- Product detail modal and reliable collection navigation.
+- Shop / Luxury / Lawn 3PC / Sale filtering.
+- Add to Bag → Cart → Checkout → Supabase order → WhatsApp.
+- Customer signup/login with Supabase Auth.
+- Admin access controlled by `profiles.role = 'admin'`.
+- Admin product create/edit/archive and image upload to `product-images`.
+- Automatic SOLD OUT presentation when stock is zero.
+- Admin order status updates and store settings.
+
+## Environment variables
+
+Set these in Vercel for Production and Preview:
+
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_ANON_KEY` (use the Supabase Publishable key)
 
-## Included
-- Supabase Auth customer signup/login
-- Admin role protection
-- Products stored in Supabase PostgreSQL
-- Admin product CRUD
-- Supabase Storage product image uploads
-- Orders and order items stored in database
-- Stock decrement after order creation
-- Order status management
-- Live store settings editable by admin
-- Cart and WhatsApp cart ordering to the saved store WhatsApp number
-- Vercel SPA rewrite
+## Supabase
 
-Default store WhatsApp: 923046093592
-Default brand: NAWAL COLLECTIONS
-Copyright: ALISHAIR5
+The existing tables are expected:
+`profiles`, `products`, `orders`, `order_items`, `store_settings`.
+
+Keep RLS enabled and expose the required `public` tables through Data API.
+
+For secure stock decrement, run `supabase/production_migration.sql` once in Supabase SQL Editor.
 
 ## Important
-The uploaded ZIP does not contain secrets. Add the Supabase URL and public/publishable key as Vercel environment variables before deploying.
+
+The frontend does not auto-seed products. Add real products from Admin after deployment.
