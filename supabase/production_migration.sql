@@ -16,3 +16,6 @@ end;
 $$;
 revoke all on function public.decrement_product_stock(uuid, integer) from public;
 grant execute on function public.decrement_product_stock(uuid, integer) to authenticated;
+
+-- Set NAWAL COLLECTIONS WhatsApp number requested for production orders.
+update public.store_settings set whatsapp_number = '923039249849' where id = 1;
