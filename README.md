@@ -1,27 +1,43 @@
-# NAWAL COLLECTIONS — Clean Production Candidate
+# NAWAL COLLECTIONS — WhatsApp Cart Ecommerce
 
-This package keeps the existing storefront architecture and adds the BinNoor-style buying flow without demo products.
+## Included
+- Premium responsive storefront
+- Product catalog, search, category filters
+- Wishlist and persistent cart using browser localStorage
+- Functional checkout form
+- Order creation and order-status management
+- Admin dashboard
+- Product add/edit/delete
+- Product image URL replacement
+- Inventory/stock fields
+- Customer/order overview
+- Mobile navigation
+- SEO-ready HTML metadata
+- Vercel/Vite deployment configuration
 
-## Vercel environment variables already required
-- VITE_SUPABASE_URL
-- VITE_SUPABASE_ANON_KEY
+## Run locally
+npm install
+npm run dev
 
-## Included behavior
-- Browse without customer login.
-- Product details → Add to Bag → Cart → Checkout.
-- Customer login/create account appears at checkout when required.
-- After authentication, checkout remains open so entered checkout data is preserved.
-- Order + order items are written to Supabase before WhatsApp opens.
-- WhatsApp destination is 923039249849 (03039249849).
-- Stock is decremented through `decrement_product_stock` RPC.
-- Stock 0 displays SOLD OUT and disables Add to Bag.
-- Admin can add/edit/delete products and upload a product image.
-- Admin Orders and Customers tabs read from Supabase.
-- No seed/demo product insertion.
-- No placeholder image URLs.
-- No localhost URLs or service-role/secret key in the frontend.
+## Production build
+npm run build
 
-## Required one-time Supabase migration
-Run `supabase/production_migration.sql` in Supabase SQL Editor. It creates the secure stock-decrement RPC and updates `store_settings.whatsapp_number` to 923039249849.
+## Vercel
+Import the GitHub repository into Vercel. Framework: Vite. Build: `npm run build`. Output: `dist`.
 
-Keep RLS enabled.
+## Important production integration
+This build intentionally does not fake a payment provider or cloud database. For a real multi-user store, connect a database/auth service and a payment gateway. The UI and local working flows are already wired so those services can be attached without redesigning the storefront.
+
+\n## WhatsApp Cart
+Default WhatsApp order number: `923039249849`.
+Customers add products to cart and click **ORDER CART ON WHATSAPP**. A pre-filled cart message opens in WhatsApp. The client can change the number from Admin → Store Settings.
+\n## Client handover
+The Admin panel includes editable Store Settings and Product Editor. Replace brand name, WhatsApp number, copyright, product data and product image URLs after the trial.
+
+
+## Production setup
+1. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel Environment Variables.
+2. Run `supabase/seed.sql` once in Supabase SQL Editor to publish the preserved starter catalogue with real UUID product IDs.
+3. Keep RLS enabled and expose the public schema/tables through Data API.
+4. Use the existing admin policies/role model for product management.
+5. Customer login is requested only at the final order step.
