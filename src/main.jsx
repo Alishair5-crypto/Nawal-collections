@@ -12,7 +12,6 @@ const categoryMap={
  "Winter":["KHADDAR","Golden Shamray","Linen Bana Dora","LINEN 2Pcs"]
 };
 const money=n=>"PKR "+Number(n||0).toLocaleString();
-const normalizePhone=n=>String(n||"").replace(/\D/g,"").replace(/^0/,"92");
 const makeOrderNumber=()=>`NC-${Date.now().toString().slice(-9)}`;
 const normalizeProduct=p=>({id:p.id,name:p.name,cat:p.category||"Lawn 3PC",price:Number(p.sale_price??p.price??0),old:Number(p.price??0),stock:Number(p.stock??0),badge:p.badge||"",img:p.image_url||"",images:Array.isArray(p.images)?p.images.filter(Boolean):[],description:p.description||""});
 const waNumber="923039249849";
@@ -26,50 +25,123 @@ function App(){
  useEffect(()=>localStorage.setItem("nawal_cart",JSON.stringify(cart)),[cart]);
  useEffect(()=>localStorage.setItem("nawal_wish",JSON.stringify(wish)),[wish]);
  useEffect(()=>{document.body.style.overflow=(selected||checkout||authOpen||admin||confirmation)?"hidden":"";return()=>{document.body.style.overflow=""}},[selected,checkout,authOpen,admin,confirmation]);
- useEffect(()=>{let cancelled=false;(async()=>{if(!supabase){setLoading(false);setNotice("Supabase is not configured.");return;}const{data:{session}}=await supabase.auth.getSession();if(cancelled)return;setUser(session?.user||null);if(session?.user)await loadProfile(session.user.id);await loadProducts();setLoading(false);const{data:{subscription}}=supabase.auth.onAuthStateChange(async(_,s)=>{setUser(s?.user||null);if(s?.user)await loadProfile(s.user.id);else setProfile(null)});return()=>{cancelled=true;subscription.unsubscribe()}})();return()=>{cancelled=true}},[]);
- async function loadProducts(){const{data,error}=await supabase.from("products").select("*").eq("is_active",true).order("created_at",{ascending:false});if(error){setNotice(error.message);setProducts([]);return;}const mapped=(data||[]).map(normalizeProduct);setProducts(mapped);setCart(c=>c.filter(i=>mapped.some(p=>p.id===i.id)).map(i=>{const p=mapped.find(p=>p.id===i.id);return {...p,q:Math.max(1,Math.min(Number(i.q)||1,p.stock))}}));}
- async function loadProfile(id){const{data,error}=await supabase.from("profiles").select("*").eq("id",id).maybeSingle();if(error){setProfile(null);return null}setProfile(data||null);return data||null;}
- async function loadAdminData(){if(profile?.role!=="admin")return;const[o,c]=await Promise.all([supabase.from("orders").select("*").order("created_at",{ascending:false}),supabase.from("profiles").select("*").order("created_at",{ascending:false})]);setOrders(o.data||[]);setCustomers(c.data||[]);}
- const shown=useMemo(()=>products.filter(p=>{const text=query.toLowerCase().trim();const sale=filter==="Sale"?(p.old>p.price):true;const catMatch=filter==="All"||filter==="Sale"?sale:p.cat===filter;return catMatch&&(!text||p.name.toLowerCase().includes(text)||p.cat.toLowerCase().includes(text))}),[products,filter,query]);
+ useEffect(()=>{
+  let cancelled=false;
+  (async()=>{
+   if(!supabase){setLoading(false);setNotice("Supabase is not configured.");return;}
+   const{data:{session}}=await supabase.auth.getSession();
+   if(cancelled)return;
+   setUser(session?.user||null);
+   if(session?.user)await loadProfile(session.user.id);
+   await loadProducts();
+   setLoading(false);
+  })();
+  const{data:{subscription}}=supabase?supabase.auth.onAuthStateChange(async(_,s)=>{
+   setUser(s?.user||null);
+   if(s?.user)await loadProfile(s.user.id);else setProfile(null);
+  }):{data:{subscription:null}};
+  return()=>{cancelled=true;subscription?.unsubscribe?.()};
+ },[]);
+ async function loadProducts(){
+  if(!supabase)return;
+  const{data,error}=await supabase.from("products").select("*").eq("is_active",true).order("created_at",{ascending:false});
+  if(error){setNotice(error.message);setProducts([]);return;}
+  const mapped=(data||[]).map(normalizeProduct);
+  setProducts(mapped);
+  setCart(c=>c.filter(i=>mapped.some(p=>p.id===i.id)).map(i=>{const p=mapped.find(p=>p.id===i.id);return {...p,q:Math.max(1,Math.min(Number(i.q)||1,p.stock))}}));
+ }
+ async function loadProfile(id){
+  if(!supabase||!id)return null;
+  const{data,error}=await supabase.from("profiles").select("*").eq("id",id).maybeSingle();
+  if(error){setProfile(null);return null;}
+  setProfile(data||null);return data||null;
+ }
+ async function loadAdminData(profileOverride=null){
+  if(!supabase)return;
+  const activeProfile=profileOverride||profile;
+  if(activeProfile?.role!=="admin")return;
+  const[o,c]=await Promise.all([
+   supabase.from("orders").select("*").order("created_at",{ascending:false}),
+   supabase.from("profiles").select("*").order("created_at",{ascending:false})
+  ]);
+  setOrders(o.data||[]);setCustomers(c.data||[]);
+ }
+ const shown=useMemo(()=>products.filter(p=>{
+  const text=query.toLowerCase().trim();
+  const sale=filter==="Sale"?(p.old>p.price):true;
+  const catMatch=filter==="All"||filter==="Sale"?sale:p.cat===filter;
+  return catMatch&&(!text||p.name.toLowerCase().includes(text)||p.cat.toLowerCase().includes(text));
+ }),[products,filter,query]);
  const goShop=next=>{setQuery("");setFilter(next);setMenu(false);requestAnimationFrame(()=>document.getElementById("shop")?.scrollIntoView({behavior:"smooth",block:"start"}))};
  const goChild=(parent,child)=>{setQuery(child==="Luxury"?"":child);setFilter(parent==="Summer 26"&&child==="Lawn 3PC"?"Lawn 3PC":parent);setMenu(false);requestAnimationFrame(()=>document.getElementById("shop")?.scrollIntoView({behavior:"smooth",block:"start"}))};
  const add=p=>{if(!p.stock){setNotice("This product is sold out.");return;}setCart(c=>{const x=c.find(i=>i.id===p.id);return x?c.map(i=>i.id===p.id?{...i,q:Math.min(i.q+1,p.stock)}:i):[...c,{...p,q:1}]});setCartOpen(true)};
- const startCheckout=()=>{if(!cart.length){setNotice("Your bag is empty.");return}setCartOpen(true);setCheckout(true)};
  const setQty=(id,q)=>setCart(c=>c.map(i=>i.id===id?{...i,q:Math.max(1,Math.min(q,i.stock))}:i));
  const savePendingAndAuth=data=>{setPendingOrder(data);setAuthMode("login");setAuthOpen(true)};
- const submitOrder=async data=>{if(!user){savePendingAndAuth(data);return;}await createOrder(data)};
- async function createOrder(data){if(!supabase)return;const{data:{user:currentUser}}=await supabase.auth.getUser();if(!currentUser){setPendingOrder(data);setAuthMode("login");setAuthOpen(true);return;}const orderNumber=makeOrderNumber();const items=cart.map(p=>({product_id:p.id,quantity:p.q}));const{data:result,error}=await supabase.rpc("create_order_and_decrement_stock",{p_order_number:orderNumber,p_customer_name:data.name,p_customer_phone:data.phone,p_customer_email:currentUser.email||null,p_city:data.city,p_address:data.address,p_notes:data.notes||null,p_payment_method:data.payment,p_items:items});if(error){setNotice(error.message);return;}setCart([]);setCheckout(false);setCartOpen(false);const msg=[`NAWAL COLLECTIONS — ORDER ${orderNumber}`,"",...cart.map((p,i)=>`${i+1}. ${p.name} × ${p.q} — ${money(p.price*p.q)}`),"",`Total: ${money(total)}`,`Name: ${data.name}`,`Phone: ${data.phone}`,`City: ${data.city}`,`Address: ${data.address}`,`Payment: ${data.payment}`,`Notes: ${data.notes||"-"}`].join("\n");setConfirmation({orderNumber,total:Array.isArray(result)?(result[0]?.total??total):(result?.total??total),message:msg});setPendingOrder(null);await loadProducts();}
- async function onAuthenticated(){setAuthOpen(false);if(pendingOrder){const p={...pendingOrder};setPendingOrder(null);setTimeout(()=>createOrder(p),150)}}
+ const submitOrder=async data=>{const{data:{user:currentUser}}=supabase?await supabase.auth.getUser():{data:{user:null}};if(!currentUser){savePendingAndAuth(data);return;}await createOrder(data,currentUser)};
+ async function createOrder(data,currentUser=null){
+  if(!supabase)return;
+  let activeUser=currentUser;
+  if(!activeUser){const{data:{user:authUser}}=await supabase.auth.getUser();activeUser=authUser;}
+  if(!activeUser){setPendingOrder(data);setAuthMode("login");setAuthOpen(true);return;}
+  if(!cart.length){setNotice("Your bag is empty.");return;}
+  const orderNumber=makeOrderNumber();
+  const shipping=0;
+  const subtotal=cart.reduce((s,p)=>s+p.price*p.q,0);
+  const payload={
+   p_customer_id:activeUser.id,
+   p_customer_name:data.name,
+   p_customer_phone:data.phone,
+   p_city:data.city,
+   p_address:data.address,
+   p_payment_method:data.payment,
+   p_notes:data.notes||null,
+   p_subtotal:subtotal,
+   p_shipping:shipping,
+   p_total:subtotal+shipping
+  };
+  const{data:result,error}=await supabase.rpc("create_order",payload);
+  if(error){setNotice(error.message);return;}
+  const orderId=result?.id;
+  const insertedItems=cart.map(p=>({order_id:orderId,product_id:p.id,quantity:p.q}));
+  const itemsResp=await supabase.from("order_items").insert(insertedItems);
+  if(itemsResp.error){setNotice(`Order created, but items could not be saved: ${itemsResp.error.message}`);return;}
+  for(const p of cart){
+   const{data:stockResult,error:stockError}=await supabase.rpc("decrease_stock",{p_product_id:p.id,p_quantity:p.q});
+   if(stockError||stockResult!==true){setNotice(`Order ${result?.order_number||orderNumber} was saved, but stock could not be updated for ${p.name}.`);break;}
+  }
+  setCart([]);setCheckout(false);setCartOpen(false);
+  const msg=[`NAWAL COLLECTIONS — ORDER ${result?.order_number||orderNumber}`,"",...cart.map((p,i)=>`${i+1}. ${p.name} × ${p.q} — ${money(p.price*p.q)}`),"",`Total: ${money(subtotal+shipping)}`,`Name: ${data.name}`,`Phone: ${data.phone}`,`City: ${data.city}`,`Address: ${data.address}`,`Payment: ${data.payment}`,`Notes: ${data.notes||"-"}`].join("\n");
+  setConfirmation({orderNumber:result?.order_number||orderNumber,total:result?.total??(subtotal+shipping),message:msg});
+  setPendingOrder(null);
+  await loadProducts();
+ }
+ async function onAuthenticated(){
+  const{data:{user:currentUser}}=supabase?await supabase.auth.getUser():{data:{user:null}};
+  if(currentUser){setUser(currentUser);await loadProfile(currentUser.id);}
+  setAuthOpen(false);
+  if(pendingOrder&&currentUser){const p={...pendingOrder};setPendingOrder(null);setTimeout(()=>createOrder(p,currentUser),150);}
+ }
  async function openAdmin(){
-  if(!supabase) return;
-
-  const { data: { user: currentUser }, error } = await supabase.auth.getUser();
-
-  if(error || !currentUser){
-    setAuthMode("login");
-    setAuthOpen(true);
-    setNotice("Please login with the authorized administrator account.");
-    return;
-  }
-
+  if(!supabase)return;
+  const{data:{user:currentUser},error}=await supabase.auth.getUser();
+  if(error||!currentUser){setAuthMode("login");setAuthOpen(true);setNotice("Please login with the authorized administrator account.");return;}
   setUser(currentUser);
-
-  const adminProfile = await loadProfile(currentUser.id);
-
-  if(adminProfile?.role !== "admin"){
-    setNotice("Admin access is available only to an authorized administrator.");
-    return;
-  }
-
+  const adminProfile=await loadProfile(currentUser.id);
+  if(adminProfile?.role!=="admin"){setNotice("Admin access is available only to an authorized administrator.");return;}
   setProfile(adminProfile);
-  await loadAdminData();
+  await loadAdminData(adminProfile);
   setAdmin(true);
-}
- async function saveProduct(p){if(profile?.role!=="admin")return;const payload={name:p.name,description:p.description||"",category:p.cat||"Lawn 3PC",price:Number(p.old||p.price||0),sale_price:Number(p.price||0),stock:Number(p.stock||0),image_url:p.img||null,images:(p.images||[]).filter(Boolean),badge:p.badge||"",is_active:true};const response=p.id?await supabase.from("products").update(payload).eq("id",p.id):await supabase.from("products").insert(payload);if(response.error)setNotice(response.error.message);else{setEditing(null);await loadProducts();}}
+ }
+ async function saveProduct(p){
+  if(profile?.role!=="admin")return;
+  const payload={name:p.name,description:p.description||"",category:p.cat||"Lawn 3PC",price:Number(p.old||p.price||0),sale_price:Number(p.price||0),stock:Number(p.stock||0),image_url:p.img||null,images:(p.images||[]).filter(Boolean),badge:p.badge||"",is_active:true};
+  const response=p.id?await supabase.from("products").update(payload).eq("id",p.id):await supabase.from("products").insert(payload);
+  if(response.error)setNotice(response.error.message);else{setEditing(null);await loadProducts();}
+ }
  async function removeProduct(id){if(profile?.role!=="admin")return;const{error}=await supabase.from("products").update({is_active:false}).eq("id",id);if(error)setNotice(error.message);else loadProducts()}
- async function updateStatus(id,status){const{error}=await supabase.from("orders").update({status}).eq("id",id);if(error)setNotice(error.message);else loadAdminData()}
- async function signOut(){await supabase.auth.signOut();setAdmin(false)}
- function openWhatsapp(message){window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`,"_blank","noopener,noreferrer")}
+ async function updateStatus(id,status){const{error}=await supabase.from("orders").update({status}).eq("id",id);if(error)setNotice(error.message);else loadAdminData(profile)}
+ async function signOut(){await supabase.auth.signOut();setAdmin(false);setUser(null);setProfile(null)}
+ function openWhatsapp(message="Hello NAWAL COLLECTIONS."){window.open(`https://wa.me/${waNumber}${message?`?text=${encodeURIComponent(message)}`:""}`,"_blank","noopener,noreferrer")}
  const categoryHero=x=>products.find(p=>p.cat===x)?.img||products[0]?.img||"";
  return <div>
   <div className="announce">FREE SHIPPING ON ORDERS ABOVE PKR 2,500 <span>•</span> EASY RETURNS</div>
@@ -91,25 +163,25 @@ function App(){
   </main>
   <footer><div className="logo">ATELIER<span>+</span></div><div><h4>SHOP</h4><button className="footerLink" onClick={()=>goShop("All")}>New In</button><button className="footerLink" onClick={()=>goShop("All")}>Collections</button><button className="footerLink" onClick={()=>goShop("Sale")}>Sale</button></div><div><h4>HELP</h4><p>Shipping</p><p>Returns</p><button className="footerLink" onClick={()=>openWhatsapp("Hello NAWAL COLLECTIONS, I need help.")}>Contact</button></div><div><h4>FOLLOW</h4><p>Instagram</p><p>Facebook</p><button className="footerLink" onClick={()=>openWhatsapp("Hello NAWAL COLLECTIONS.")}>WhatsApp</button></div><small>© 2026 NAWAL COLLECTIONS. All rights reserved. ALISHAIR5.</small></footer>
 
-  {cartOpen&&<><div className="shade" onClick={()=>setCartOpen(false)}/><aside className="drawer"><div className="drawerHead"><h2>Your Bag</h2><button className="icon" onClick={()=>setCartOpen(false)}><X/></button></div>{!cart.length?<div className="empty">Your bag is empty.</div>:<><div className="bagList">{cart.map(p=><div className="line" key={p.id}><img src={p.img} alt={p.name}/><div><h4>{p.name}</h4><p>{money(p.price)}</p><div className="qty"><button onClick={()=>setQty(p.id,p.q-1)}><Minus size={14}/></button><span>{p.q}</span><button onClick={()=>setQty(p.id,p.q+1)}><Plus size={14}/></button><button onClick={()=>setCart(c=>c.filter(i=>i.id!==p.id))}><Trash2 size={14}/></button></div></div></div>)}</div><div className="checkout"><div><span>Subtotal</span><b>{money(total)}</b></div><div className="drawerActions"><button className="secondaryBtn" onClick={()=>setCartOpen(true)}>VIEW CART</button><button className="secondaryBtn" onClick={()=>{setCheckout(true)}}>CHECKOUT <ArrowRight size={17}/></button><button className="textBtn" onClick={()=>setCartOpen(false)}>CONTINUE SHOPPING</button></div></div></>}</aside></>}
+  {cartOpen&&<><div className="shade" onClick={()=>setCartOpen(false)}/><aside className="drawer"><div className="drawerHead"><h2>Your Bag</h2><button className="icon" onClick={()=>setCartOpen(false)}><X/></button></div>{!cart.length?<div className="empty">Your bag is empty.</div>:<><div className="bagList">{cart.map(p=><div className="line" key={p.id}><img src={p.img} alt={p.name}/><div><h4>{p.name}</h4><p>{money(p.price)}</p><div className="qty"><button onClick={()=>setQty(p.id,p.q-1)}><Minus size={14}/></button><span>{p.q}</span><button onClick={()=>setQty(p.id,p.q+1)}><Plus size={14}/></button><button onClick={()=>setCart(c=>c.filter(i=>i.id!==p.id))}><Trash2 size={14}/></button></div></div></div>)}</div><div className="checkout"><div><span>Subtotal</span><b>{money(total)}</b></div><div className="drawerActions"><button className="secondaryBtn" onClick={()=>setCartOpen(true)}>VIEW CART</button><button className="secondaryBtn" onClick={()=>{if(cart.length){setCheckout(true)}else setNotice("Your bag is empty.")}}>CHECKOUT <ArrowRight size={17}/></button><button className="textBtn" onClick={()=>setCartOpen(false)}>CONTINUE SHOPPING</button></div></div></>}</aside></>}
   {selected&&<ProductDetail p={selected} onClose={()=>setSelected(null)} onAdd={add} onBuyNow={()=>setCheckout(true)}/>} 
   {checkout&&<Checkout cart={cart} total={total} user={user} onClose={()=>setCheckout(false)} onSubmit={submitOrder}/>} 
   {authOpen&&<AuthModal mode={authMode} setMode={setAuthMode} onClose={()=>setAuthOpen(false)} onAuthenticated={onAuthenticated} pendingCheckout={Boolean(pendingOrder)}/>} 
   {confirmation&&<OrderConfirmation order={confirmation} onClose={()=>setConfirmation(null)} onWhatsApp={()=>openWhatsapp(confirmation.message)} onContinue={()=>setConfirmation(null)}/>} 
   <a className="floatingWhatsApp" href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={28}/></a>
-  {admin&&<Admin products={products} orders={orders} customers={customers} profile={profile} setOrders={setOrders} editing={editing} setEditing={setEditing} removeProduct={removeProduct} saveProduct={saveProduct} updateStatus={updateStatus} onClose={()=>setAdmin(false)} signOut={signOut} reload={loadAdminData}/>} 
+  {admin&&<Admin products={products} orders={orders} customers={customers} profile={profile} editing={editing} setEditing={setEditing} removeProduct={removeProduct} saveProduct={saveProduct} updateStatus={updateStatus} onClose={()=>setAdmin(false)} signOut={signOut} reload={loadAdminData}/>} 
  </div>
 }
 
 function ProductDetail({p,onClose,onAdd,onBuyNow}){const images=[p.img,...(p.images||[])].filter(Boolean);const[active,setActive]=useState(images[0]||"");const[q,setQ]=useState(1);return <div className="modalShade" onClick={onClose}><div className="modal productDetail" onClick={e=>e.stopPropagation()}><div className="modalHead"><h2>{p.name}</h2><button className="icon" onClick={onClose}><X/></button></div><div className="productDetailGrid"><div><img className="detailImage" src={active} alt={p.name}/>{images.length>1&&<div className="thumbs">{images.map(img=><button key={img} className={active===img?"activeThumb":""} onClick={()=>setActive(img)}><img src={img} alt=""/></button>)}</div>}</div><div><p className="eyebrow">{p.cat}</p><h2>{p.name}</h2><div className="detailPrice"><strong>{money(p.price)}</strong>{p.old>p.price&&<del>{money(p.old)}</del>} {p.old>p.price&&<span className="salePill">SALE</span>}</div><p>{p.description}</p><p><b>{p.stock>0?`${p.stock} available`:"SOLD OUT"}</b></p><div className="qty detailQty"><button disabled={!p.stock||q<=1} onClick={()=>setQ(v=>Math.max(1,v-1))}><Minus size={15}/></button><span>{q}</span><button disabled={!p.stock||q>=p.stock} onClick={()=>setQ(v=>Math.min(p.stock,v+1))}><Plus size={15}/></button></div><button className="primary full" disabled={!p.stock} onClick={()=>{for(let i=0;i<q;i++)onAdd(p);onClose()}}>{p.stock?"ADD TO CART":"SOLD OUT"}</button><button className="secondaryBtn fullBtn" disabled={!p.stock} onClick={()=>{for(let i=0;i<q;i++)onAdd(p);onClose();setTimeout(()=>onBuyNow(),0)}}>BUY IT NOW</button></div></div></div></div>}
 
-function Checkout({cart,total,user,onClose,onSubmit}){const[f,setF]=useState({name:"",phone:"",city:"",address:"",payment:"Cash on Delivery",notes:""});const[busy,setBusy]=useState(false);const valid=f.name&&f.phone&&f.city&&f.address;async function submit(){if(!valid)return;setBusy(true);await onSubmit(f);setBusy(false)}return <div className="modalShade checkoutShade"><div className="checkoutShell" onClick={e=>e.stopPropagation()}><section className="checkoutMain"><div className="modalHead"><h2>Checkout</h2><button className="icon" onClick={onClose}><X/></button></div><div className="checkoutSteps"><span className="active">Contact</span><span>Delivery</span><span>Payment</span><span>Complete</span></div>{!user&&<div className="checkoutGate"><Lock size={16}/> Login or create your account only at this final step to complete the order.</div>}<div className="formGrid">{[["name","Full name",User],["phone","Mobile / WhatsApp",Phone],["city","City",MapPin],["address","Complete delivery address",MapPin]].map(([k,l,Icon])=><label key={k}>{l}<div className="inputWrap"><Icon size={14}/><input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}/></div></label>)}</div><label>Payment<select value={f.payment} onChange={e=>setF({...f,payment:e.target.value})}><option>Cash on Delivery</option><option>JazzCash</option><option>Easypaisa</option><option>Bank Transfer</option></select></label><label>Order notes<textarea value={f.notes} onChange={e=>setF({...f,notes:e.target.value})}/></label><div className="totalRow"><b>Total</b><strong>{money(total)}</strong></div><button className="primary full" disabled={busy||!valid} onClick={submit}>{busy?"PLEASE WAIT":"COMPLETE ORDER"}</button></section><aside className="checkoutSummary"><h2>Your Bag</h2><div className="summaryItems">{cart.map(p=><div className="summaryItem" key={p.id}><img src={p.img} alt={p.name}/><div><b>{p.name}</b><span>{p.q} × {money(p.price)}</span></div></div>)}</div><div className="summaryTotal"><span>Subtotal</span><b>{money(total)}</b></div><button className="secondaryBtn fullBtn" onClick={()=>{}}>CHECKOUT <ArrowRight size={17}/></button></aside></div></div>}
+function Checkout({cart,total,user,onClose,onSubmit}){const[f,setF]=useState({name:"",phone:"",city:"",address:"",payment:"Cash on Delivery",notes:""});const[busy,setBusy]=useState(false);const valid=f.name&&f.phone&&f.city&&f.address;async function submit(){if(!valid)return;setBusy(true);await onSubmit(f);setBusy(false)}return <div className="modalShade checkoutShade"><div className="checkoutShell" onClick={e=>e.stopPropagation()}><section className="checkoutMain"><div className="modalHead"><h2>Checkout</h2><button className="icon" onClick={onClose}><X/></button></div><div className="checkoutSteps"><span className="active">Contact</span><span>Delivery</span><span>Payment</span><span>Complete</span></div>{!user&&<div className="checkoutGate"><Lock size={16}/> Login or create your account only at this final step to complete the order.</div>}<div className="formGrid">{[["name","Full name",User],["phone","Mobile / WhatsApp",Phone],["city","City",MapPin],["address","Complete delivery address",MapPin]].map(([k,l,Icon])=><label key={k}>{l}<div className="inputWrap"><Icon size={14}/><input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}/></div></label>)}</div><label>Payment<select value={f.payment} onChange={e=>setF({...f,payment:e.target.value})}><option>Cash on Delivery</option><option>JazzCash</option><option>Easypaisa</option><option>Bank Transfer</option></select></label><label>Order notes<textarea value={f.notes} onChange={e=>setF({...f,notes:e.target.value})}/></label><div className="totalRow"><b>Total</b><strong>{money(total)}</strong></div><button className="primary full" disabled={busy||!valid} onClick={submit}>{busy?"PLEASE WAIT":"COMPLETE ORDER"}</button></section><aside className="checkoutSummary"><h2>Your Bag</h2><div className="summaryItems">{cart.map(p=><div className="summaryItem" key={p.id}><img src={p.img} alt={p.name}/><div><b>{p.name}</b><span>{p.q} × {money(p.price)}</span></div></div>)}</div><div className="summaryTotal"><span>Subtotal</span><b>{money(total)}</b></div></aside></div></div>}
 
-function AuthModal({mode,setMode,onClose,onAuthenticated,pendingCheckout}){const[f,setF]=useState({email:"",password:"",name:"",phone:""});const[msg,setMsg]=useState("");const[busy,setBusy]=useState(false);async function submit(){if(!supabase)return;setBusy(true);setMsg("");try{if(mode==="signup"){const{data,error}=await supabase.auth.signUp({email:f.email,password:f.password,options:{data:{full_name:f.name,phone:f.phone}}});if(error)throw error;setMsg(data.session?"Account created. Completing your order…":"Account created. Please confirm your email, then login to complete your order.");if(data.session)onAuthenticated();else setMode("login")}else{const{error}=await supabase.auth.signInWithPassword({email:f.email,password:f.password});if(error)throw error;onAuthenticated()}}catch(e){setMsg(e.message)}finally{setBusy(false)}}return <div className="modalShade"><div className="modal authModal"><div className="modalHead"><h2>{mode==="login"?"Login to complete order":"Create your account"}</h2><button className="icon" onClick={onClose}><X/></button></div>{pendingCheckout&&<div className="checkoutGate"><Lock size={16}/> Your cart and checkout details will stay here while you sign in.</div>}{mode==="signup"&&<><label>Full name<input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></label><label>Mobile / WhatsApp<input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})}/></label></>}<label>Email<input type="email" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></label><label>Password<input type="password" value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></label>{msg&&<div className="hint">{msg}</div>}<button className="primary full" disabled={busy||!f.email||!f.password} onClick={submit}>{busy?"PLEASE WAIT":mode==="login"?"LOGIN":"CREATE ACCOUNT"}</button><button className="linkBtn" onClick={()=>setMode(mode==="login"?"signup":"login")}>{mode==="login"?<><UserPlus size={15}/> Create account</>:<><Lock size={15}/> I already have an account</>}</button></div></div>}
+function AuthModal({mode,setMode,onClose,onAuthenticated,pendingCheckout}){const[f,setF]=useState({email:"",password:"",name:"",phone:""});const[msg,setMsg]=useState("");const[busy,setBusy]=useState(false);async function submit(){if(!supabase)return;setBusy(true);setMsg("");try{if(mode==="signup"){const{data,error}=await supabase.auth.signUp({email:f.email,password:f.password,options:{data:{full_name:f.name,phone:f.phone}}});if(error)throw error;setMsg(data.session?"Account created. Completing your order…":"Account created. Please confirm your email, then login to complete your order.");if(data.session)onAuthenticated();else setMode("login")}else{const{error}=await supabase.auth.signInWithPassword({email:f.email,password:f.password});if(error)throw error;onAuthenticated()}}catch(e){setMsg(e.message)}finally{setBusy(false)}}return <div className="modalShade"><div className="modal authModal"><div className="modalHead"><h2>{mode==="login"?"Login":"Create your account"}</h2><button className="icon" onClick={onClose}><X/></button></div>{pendingCheckout&&<div className="checkoutGate"><Lock size={16}/> Your cart and checkout details will stay here while you sign in.</div>}{mode==="signup"&&<><label>Full name<input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></label><label>Mobile / WhatsApp<input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})}/></label></>}<label>Email<input type="email" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></label><label>Password<input type="password" value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></label>{msg&&<div className="hint">{msg}</div>}<button className="primary full" disabled={busy||!f.email||!f.password} onClick={submit}>{busy?"PLEASE WAIT":mode==="login"?"LOGIN":"CREATE ACCOUNT"}</button><button className="linkBtn" onClick={()=>setMode(mode==="login"?"signup":"login")}>{mode==="login"?<><UserPlus size={15}/> Create account</>:<><Lock size={15}/> I already have an account</>}</button></div></div>}
 
 function OrderConfirmation({order,onClose,onWhatsApp,onContinue}){return <div className="modalShade"><div className="modal confirmationModal"><CheckCircle size={52} className="successIcon"/><h2>Order Confirmed</h2><p>Your order <b>{order.orderNumber}</b> has been saved successfully.</p><div className="confirmTotal">Total: <b>{money(order.total)}</b></div><button className="whatsappBtn" onClick={onWhatsApp}><MessageCircle size={17}/> ORDER ON WHATSAPP</button><button className="secondaryBtn" onClick={onContinue}>CONTINUE SHOPPING</button><button className="linkBtn" onClick={onClose}>CLOSE</button></div></div>}
 
-function Admin({products,orders,customers,profile,editing,setEditing,removeProduct,saveProduct,updateStatus,onClose,signOut,reload}){const[tab,setTab]=useState("dashboard");const blank={name:"",cat:"Lawn 3PC",price:0,old:0,stock:0,badge:"",img:"",images:[],description:""};useEffect(()=>{reload()},[]);return <div className="adminShade"><div className="admin"><aside className="adminSide"><div className="logo">NAWAL COLLECTIONS</div><button onClick={()=>setTab("dashboard")}><Package/>Dashboard</button><button onClick={()=>setTab("products")}><ImageIcon/>Products</button><button onClick={()=>setTab("orders")}><ShoppingBag/>Orders</button><button onClick={()=>setTab("customers")}><Users/>Customers</button><button onClick={()=>setTab("settings")}><Settings/>Store Settings</button><button onClick={signOut}><LogOut/>Logout</button><button onClick={onClose}><X/>Close</button></aside><section className="adminMain"><div className="adminTop"><div><p className="eyebrow">AUTHORIZED ADMIN</p><h1>{tab[0].toUpperCase()+tab.slice(1)}</h1></div><button className="icon" onClick={onClose}><X/></button></div>{tab==="dashboard"&&<div className="stats"><div><b>{products.length}</b><span>Active Products</span></div><div><b>{orders.length}</b><span>Orders</span></div><div><b>{customers.length}</b><span>Customers</span></div><div><b>{money(orders.reduce((s,o)=>s+Number(o.total||0),0))}</b><span>Total Order Value</span></div></div>}{tab==="products"&&<><button className="primary" onClick={()=>setEditing({...blank})}>+ ADD PRODUCT</button><div className="table">{products.map(p=><div className="tr" key={p.id}><img src={p.img} alt={p.name}/><span><b>{p.name}</b><small>{p.cat} · {money(p.price)} · {p.stock<=0?"SOLD OUT":`${p.stock} stock`}</small></span><button onClick={()=>setEditing(p)}>Edit</button><button className="danger" onClick={()=>removeProduct(p.id)}>Delete</button></div>)}</div></>}{tab==="orders"&&<div className="table">{orders.length?orders.map(o=><div className="tr" key={o.id}><span><b>{o.order_number}</b><small>{o.customer_name} · {o.customer_phone} · {o.city}</small></span><strong>{money(o.total)}</strong><select value={o.status||"new"} onChange={e=>updateStatus(o.id,e.target.value)}><option value="new">New</option><option value="confirmed">Confirmed</option><option value="packed">Packed</option><option value="shipped">Shipped</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option></select></div>):<p>No orders yet.</p>}</div>}{tab==="customers"&&<div className="table">{customers.length?customers.map(c=><div className="tr" key={c.id}><span><b>{c.full_name||c.name||c.email||"Customer"}</b><small>{c.phone||""} · {c.email||""} · {c.role||"customer"}</small></span></div>):<p>No customer profiles yet.</p>}</div>}{tab==="settings"&&<div className="settingsPanel"><h2>Store Settings</h2><p>WhatsApp order number</p><strong>03039249849</strong><p>Orders are saved in Supabase before the customer is offered WhatsApp confirmation.</p></div>}</section></div>{editing&&<ProductEditor p={editing} onClose={()=>setEditing(null)} onSave={saveProduct}/>}</div>}
+function Admin({products,orders,customers,profile,editing,setEditing,removeProduct,saveProduct,updateStatus,onClose,signOut,reload}){const[tab,setTab]=useState("dashboard");const blank={name:"",cat:"Lawn 3PC",price:0,old:0,stock:0,badge:"",img:"",images:[],description:""};useEffect(()=>{reload(profile)},[]);return <div className="adminShade"><div className="admin"><aside className="adminSide"><div className="logo">NAWAL COLLECTIONS</div><button onClick={()=>setTab("dashboard")}><Package/>Dashboard</button><button onClick={()=>setTab("products")}><ImageIcon/>Products</button><button onClick={()=>setTab("orders")}><ShoppingBag/>Orders</button><button onClick={()=>setTab("customers")}><Users/>Customers</button><button onClick={()=>setTab("settings")}><Settings/>Store Settings</button><button onClick={signOut}><LogOut/>Logout</button><button onClick={onClose}><X/>Close</button></aside><section className="adminMain"><div className="adminTop"><div><p className="eyebrow">AUTHORIZED ADMIN</p><h1>{tab[0].toUpperCase()+tab.slice(1)}</h1></div><button className="icon" onClick={onClose}><X/></button></div>{tab==="dashboard"&&<div className="stats"><div><b>{products.length}</b><span>Active Products</span></div><div><b>{orders.length}</b><span>Orders</span></div><div><b>{customers.length}</b><span>Customers</span></div><div><b>{money(orders.reduce((s,o)=>s+Number(o.total||0),0))}</b><span>Total Order Value</span></div></div>}{tab==="products"&&<><button className="primary" onClick={()=>setEditing({...blank})}>+ ADD PRODUCT</button><div className="table">{products.map(p=><div className="tr" key={p.id}><img src={p.img} alt={p.name}/><span><b>{p.name}</b><small>{p.cat} · {money(p.price)} · {p.stock<=0?"SOLD OUT":`${p.stock} stock`}</small></span><button onClick={()=>setEditing(p)}>Edit</button><button className="danger" onClick={()=>removeProduct(p.id)}>Delete</button></div>)}</div></>}{tab==="orders"&&<div className="table">{orders.length?orders.map(o=><div className="tr" key={o.id}><span><b>{o.order_number}</b><small>{o.customer_name} · {o.customer_phone} · {o.city}</small></span><strong>{money(o.total)}</strong><select value={o.status||"new"} onChange={e=>updateStatus(o.id,e.target.value)}><option value="new">New</option><option value="confirmed">Confirmed</option><option value="packed">Packed</option><option value="shipped">Shipped</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option></select></div>):<p>No orders yet.</p>}</div>}{tab==="customers"&&<div className="table">{customers.length?customers.map(c=><div className="tr" key={c.id}><span><b>{c.full_name||c.name||c.email||"Customer"}</b><small>{c.phone||""} · {c.email||""} · {c.role||"customer"}</small></span></div>):<p>No customer profiles yet.</p>}</div>}{tab==="settings"&&<div className="settingsPanel"><h2>Store Settings</h2><p>WhatsApp order number</p><strong>03039249849</strong><p>Orders are saved in Supabase before the customer is offered WhatsApp confirmation.</p></div>}</section></div>{editing&&<ProductEditor p={editing} onClose={()=>setEditing(null)} onSave={saveProduct}/>}</div>}
 
 function ProductEditor({p,onClose,onSave}){const[x,setX]=useState({...p,images:Array.isArray(p.images)?p.images:[]});const[extra,setExtra]=useState((x.images||[]).join("\n"));return <div className="modalShade"><div className="modal"><div className="modalHead"><h2>{x.id?"Edit Product":"Add Product"}</h2><button className="icon" onClick={onClose}><X/></button></div><div className="formGrid">{[["name","PRODUCT NAME"],["cat","CATEGORY"],["price","SALE PRICE"],["old","REGULAR PRICE"],["stock","STOCK"],["badge","BADGE"],["img","MAIN IMAGE URL"]].map(([k,l])=><label key={k}>{l}<input value={x[k]??""} onChange={e=>setX({...x,[k]:["price","old","stock"].includes(k)?Number(e.target.value):e.target.value})}/></label>)}</div><label>ADDITIONAL IMAGE URLS<textarea value={extra} onChange={e=>setExtra(e.target.value)} placeholder="One URL per line"/></label><label>DESCRIPTION<textarea value={x.description||""} onChange={e=>setX({...x,description:e.target.value})}/></label><button className="primary full" onClick={()=>onSave({...x,images:extra.split(/\n|,/).map(s=>s.trim()).filter(Boolean)})}>SAVE PRODUCT</button></div></div>}
 
