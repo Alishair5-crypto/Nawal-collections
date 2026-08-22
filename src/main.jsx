@@ -40,7 +40,31 @@ function App(){
  const submitOrder=async data=>{if(!user){savePendingAndAuth(data);return;}await createOrder(data)};
  async function createOrder(data){if(!supabase)return;const{data:{user:currentUser}}=await supabase.auth.getUser();if(!currentUser){setPendingOrder(data);setAuthMode("login");setAuthOpen(true);return;}const orderNumber=makeOrderNumber();const items=cart.map(p=>({product_id:p.id,quantity:p.q}));const{data:result,error}=await supabase.rpc("create_order_and_decrement_stock",{p_order_number:orderNumber,p_customer_name:data.name,p_customer_phone:data.phone,p_customer_email:currentUser.email||null,p_city:data.city,p_address:data.address,p_notes:data.notes||null,p_payment_method:data.payment,p_items:items});if(error){setNotice(error.message);return;}setCart([]);setCheckout(false);setCartOpen(false);const msg=[`NAWAL COLLECTIONS — ORDER ${orderNumber}`,"",...cart.map((p,i)=>`${i+1}. ${p.name} × ${p.q} — ${money(p.price*p.q)}`),"",`Total: ${money(total)}`,`Name: ${data.name}`,`Phone: ${data.phone}`,`City: ${data.city}`,`Address: ${data.address}`,`Payment: ${data.payment}`,`Notes: ${data.notes||"-"}`].join("\n");setConfirmation({orderNumber,total:Array.isArray(result)?(result[0]?.total??total):(result?.total??total),message:msg});setPendingOrder(null);await loadProducts();}
  async function onAuthenticated(){setAuthOpen(false);if(pendingOrder){const p={...pendingOrder};setPendingOrder(null);setTimeout(()=>createOrder(p),150)}}
- async function openAdmin(){if(!user){setAuthMode("login");setAuthOpen(true);setNotice("Please login with the authorized administrator account.");return;}const adminProfile=await loadProfile(user.id);if(adminProfile?.role!=="admin"){setNotice("Admin access is available only to an authorized administrator.");return;}await loadAdminData();setAdmin(true)}
+ async function openAdmin(){
+  if(!supabase) return;
+
+  const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+
+  if(error || !currentUser){
+    setAuthMode("login");
+    setAuthOpen(true);
+    setNotice("Please login with the authorized administrator account.");
+    return;
+  }
+
+  setUser(currentUser);
+
+  const adminProfile = await loadProfile(currentUser.id);
+
+  if(adminProfile?.role !== "admin"){
+    setNotice("Admin access is available only to an authorized administrator.");
+    return;
+  }
+
+  setProfile(adminProfile);
+  await loadAdminData();
+  setAdmin(true);
+}
  async function saveProduct(p){if(profile?.role!=="admin")return;const payload={name:p.name,description:p.description||"",category:p.cat||"Lawn 3PC",price:Number(p.old||p.price||0),sale_price:Number(p.price||0),stock:Number(p.stock||0),image_url:p.img||null,images:(p.images||[]).filter(Boolean),badge:p.badge||"",is_active:true};const response=p.id?await supabase.from("products").update(payload).eq("id",p.id):await supabase.from("products").insert(payload);if(response.error)setNotice(response.error.message);else{setEditing(null);await loadProducts();}}
  async function removeProduct(id){if(profile?.role!=="admin")return;const{error}=await supabase.from("products").update({is_active:false}).eq("id",id);if(error)setNotice(error.message);else loadProducts()}
  async function updateStatus(id,status){const{error}=await supabase.from("orders").update({status}).eq("id",id);if(error)setNotice(error.message);else loadAdminData()}
